@@ -1,0 +1,4 @@
+@MCafeWebUrl = http://localhost:5010
+
+### Get all barista orders
+GET {{MCafeWebUrl}}/barista/orders

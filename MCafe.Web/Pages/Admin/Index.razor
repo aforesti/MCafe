@@ -1,0 +1,96 @@
+@page "/admin"
+@using MCafe.Web.Models
+@inject HttpClient Http
+@inject IConfiguration Configuration
+@inject NavigationManager NavigationManager
+@inject ModalService _modalService
+@inject IMessageService _message
+
+<PageTitle>Admin - MCafe</PageTitle>
+
+<h2>Products</h2>
+
+<div>
+    <Button Type="@ButtonType.Primary"
+        Icon="@IconType.Outline.Plus"
+        Size="@ButtonSize.Large"
+        OnClick="CreateProduct">Create New</Button>
+</div>
+
+<p class="mt-3">
+    <span class="fw-bold">Note:</span> Because we use CQRS and we build our read models from the projections service,
+    we embrace eventual consistency. This means the list of products might not show newly created products
+    after you get redirected to this page. Just refresh and you should be able to see it. We might do something
+    to help mitigate this in a later moment.
+</p>
+
+@if (_products == null)
+{
+    <Spin />
+    return;
+}
+
+@if (!_products.Any())
+{
+    <Result Title="No products to show." />
+    return;
+}
+
+
+    <Table TItem="Product"
+           DataSource="@_products"
+           Total="@(_products.Length)"
+           HidePagination="true">
+        <Column @bind-Field="@context.Name" Sortable />
+        <Column @bind-Field="@context.Price" Format="C2" Sortable />
+        <ActionColumn Title="Action">
+            <Space>
+              <SpaceItem><Button Danger OnClick="@(() => ShowDeleteConfirm(context.Id))">Delete</Button></SpaceItem>
+            </Space>
+          </ActionColumn>
+    </Table>
+
+
+@code {
+    private Product[]? _products;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var url = $"{Configuration["AdminBaseAddress"]}/products";
+        _products = await Http.GetFromJsonAsync<Product[]>(url);
+    }
+
+    void CreateProduct()
+    {
+        NavigationManager.NavigateTo("admin/create-product");
+    }
+
+
+    private async Task ShowDeleteConfirm(Guid id)
+    {
+        var productName = _products?.Single(p => p.Id == id).Name;
+        var confirmed = await _modalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "Delete item",
+            Content = $"Are you sure you want to delete {productName}?",
+            OkType = "danger",
+            Icon = @<Icon Type="exclamation-circle" Theme="outline"></Icon>
+        });
+
+        if (confirmed)
+        {
+            await DeleteItem(id);
+        }
+    }
+
+    private async Task DeleteItem(Guid id)
+    {
+        var url = $"{Configuration["AdminBaseAddress"]}/products/{id}";
+        var response = await Http.DeleteAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var product = _products?.Single(p => p.Id == id) ?? throw new InvalidOperationException();
+        await _message.Info($"{product.Name} has been deleted.");
+        _products = _products.Where(p => p.Id != id).ToArray();
+    }
+}

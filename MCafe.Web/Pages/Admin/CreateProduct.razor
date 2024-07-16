@@ -1,0 +1,65 @@
+﻿@page "/admin/create-product"
+@using MCafe.Web.Models
+@inject HttpClient HttpClient
+@inject IConfiguration Configuration
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>Create Product - MCafe</PageTitle>
+
+<h2>Create Product</h2>
+
+<Form Loading="isLoading" Model="@product"
+          OnFinish="SubmitProduct"
+          LabelColSpan="8"
+          WrapperColSpan="16">
+    <FormItem Label="Name">
+        <Input @bind-Value="@context.Name" />
+    </FormItem>
+    <FormItem Label="Price">
+        <Input @bind-Value="@context.Price" />
+    </FormItem>
+    <FormItem WrapperColOffset="8" WrapperColSpan="16">
+        <Button Type="@ButtonType.Primary" HtmlType="submit">
+            Save
+        </Button>
+    </FormItem>
+</Form>
+
+@code {
+    private bool isLoading;
+    private Product product = new Product();
+
+
+    async Task SubmitProduct()
+    {
+        isLoading = true;
+
+        var url = $"{Configuration["AdminBaseAddress"]}/products";
+        try
+        {
+            var response = await HttpClient.PostAsJsonAsync(url, product);
+            response.EnsureSuccessStatusCode();
+
+            _ = NotificationService.Success(new NotificationConfig
+                {
+                    Message = "Product Created",
+                    Description = $"Product created successfuly."
+                });
+
+            NavigationManager.NavigateTo("admin");
+        }
+        catch (Exception ex)
+        {
+            _ = NotificationService.Error(new NotificationConfig
+                {
+                    Message = "Error",
+                    Description = $"There was an error while attempting to save the product: {ex.Message}."
+                });
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

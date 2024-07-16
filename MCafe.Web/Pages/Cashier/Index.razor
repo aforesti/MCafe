@@ -1,0 +1,220 @@
+@page "/cashier"
+@using MCafe.Web.Models
+@inject HttpClient Http
+@inject IConfiguration Configuration
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>Cashier - MCafe</PageTitle>
+
+@if (_products == null)
+{
+    <Spin />
+    return;
+}
+
+@if (!_products.Any())
+{
+    <Result Title="You need products in order to place an order.">
+        <Extra>
+            <Button Type="@ButtonType.Primary" OnClick="GoAdmin">Go Admin</Button>
+        </Extra>
+    </Result>
+    return;
+}
+<div class="container">
+    <div class="order-summary">
+        <Title>Order Summary</Title>
+        <ul class="order-items">
+            @foreach (var item in _order.Items)
+            {
+                <li class="order-item">
+                    <span>@item.Quantity x @(_products.FirstOrDefault(p => p.Id == item.ProductId)?.Name)</span>
+                    <span style="text-align: right;">@(item.Total.ToString("C"))</span>
+                    <Popconfirm Title="Are you sure delete this item?"
+                                OnConfirm="@(() => RemoveItem(item.ProductId))">
+                        <button class="remove-item-btn"><Icon Type="delete" Theme="outline"/></button>
+                    </Popconfirm>
+                </li>
+            }
+        </ul>
+        @if (_order.Items.Any()) {
+            <div class="order-total">
+                <span>Total</span>
+                <span>@(_order.Total.ToString("C"))</span>
+            </div>
+
+            <button type="button" class="place-order-btn" @onclick="ShowModal">Place Order</button>
+        }
+    </div>
+    <div class="grid-container">
+        @foreach (var product in _products)
+        {
+            <button type="button" class="product-button"
+                    @onclick="() => AddItemToOrder(product.Id)">
+                <strong>@product.Name<br/>@product.Price.ToString("C")</strong>
+            </button>
+        }
+    </div>
+</div>
+
+
+<Modal Title="Place Order" Visible="_modalVisible" DestroyOnClose="true"
+       Closable="false" OnCancel="@(() => _modalVisible = false)" OnOk="@(() => HandleOk())" >
+    <Form Model="@_order" OnFinish="PlaceOrder" @ref="@_form">
+        <FormItem Label="Customer name">
+            <Input @ref="@_inputCustomerName" @bind-Value="@_order.CustomerName" />
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+
+    private Product[]? _products;
+    private readonly Order _order = new();
+    private string? _baseAddress;
+    private Form<Order> _form = new();
+    private bool _modalVisible;
+    Input<string> _inputCustomerName = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _baseAddress = Configuration["CashierBaseAddress"];
+
+        _products = await Http.GetFromJsonAsync<Product[]>($"{_baseAddress}/products");
+    }
+
+    private async Task RemoveItem(Guid productId)
+    {
+        try
+        {
+            var item = _order.Items.First(i => i.ProductId == productId);
+            var response = await Http.PostAsJsonAsync(
+                $"{_baseAddress}/cashier/orders/remove-item",
+                new { OrderId = _order.Id, productId, item.Quantity });
+            response.EnsureSuccessStatusCode();
+            _order.Items.Remove(item);
+        }
+        catch (Exception ex)
+        {
+            _ = NotificationService.Open(new NotificationConfig
+            {
+                Message = "Error",
+                Duration = 0,
+                Description = $"There was an error while attempting to remove item: {ex.Message}.",
+                NotificationType = NotificationType.Error
+            });
+        }
+    }
+
+    private void HandleOk()
+    {
+        if (!_form.Validate())
+        {
+            return;
+        }
+        _form.Submit();
+    }
+
+    async Task AddItemToOrder(Guid productId)
+    {
+        if (_order.Id == Guid.Empty)
+        {
+            await CreateOrder();
+        }
+
+        var product = _products?.FirstOrDefault(p => p.Id == productId);
+        var item = _order.Items.FirstOrDefault(i => i.ProductId == productId);
+        if (item == null)
+        {
+            item = new OrderItem { ProductId = productId, Price = product?.Price ?? 0, Quantity = 1 };
+            _order.Items.Add(item);
+        } else
+        {
+            item.Quantity++;
+        }
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"{_baseAddress}/cashier/orders/{_order.Id}/items",
+                new { item.ProductId, Quantity = 1 });
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            _ = NotificationService.Open(new NotificationConfig
+            {
+                Message = "Error",
+                Duration = 0,
+                Description = $"There was an error while attempting to add item: {ex.Message}.",
+                NotificationType = NotificationType.Error
+            });
+        }
+    }
+
+    async Task CreateOrder()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"{_baseAddress}/cashier/orders", new { CreatedBy = "cashier-1" });
+            response.EnsureSuccessStatusCode();
+
+            var order = await response.Content.ReadFromJsonAsync<Order>();
+            if (order != null)
+                _order.Id = order.Id;
+        }
+        catch (Exception ex)
+        {
+            _ = NotificationService.Open(new NotificationConfig
+                {
+                    Message = "Error",
+                    Duration = 0,
+                    Description = $"There was an error while attempting to create the order: {ex.Message}.",
+                    NotificationType = NotificationType.Error
+                });
+        }
+    }
+
+    async Task PlaceOrder()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"{_baseAddress}/cashier/orders/{_order.Id}/place",
+                new { _order.CustomerName });
+            response.EnsureSuccessStatusCode();
+
+            _ = NotificationService.Open(new NotificationConfig
+                {
+                    Message = $"{_order.CustomerName}'s Order Created",
+                    Description = "Order created successfully.",
+                    NotificationType = NotificationType.Success,
+                });
+
+            _order.Clear();
+            _form.Reset();
+            _modalVisible = false;
+        }
+        catch (Exception ex)
+        {
+            _ = NotificationService.Open(new NotificationConfig
+                {
+                    Message = "Error",
+                    Duration = 0,
+                    Description = $"There was an error while attempting to place order: {ex.Message}.",
+                    NotificationType = NotificationType.Error,
+                });
+        }
+    }
+
+    private async Task ShowModal()
+    {
+        _modalVisible = true;
+        await Task.Delay(500); // wait for modal to show
+        await _inputCustomerName.Focus();
+    }
+
+    void GoAdmin() => NavigationManager.NavigateTo("admin");
+}

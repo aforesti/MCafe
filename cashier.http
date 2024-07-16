@@ -1,0 +1,37 @@
+@MCafeWebUrl = http://localhost:5010
+@orderId = ""
+
+### Create an order
+POST {{MCafeWebUrl}}/cashier/orders
+Content-Type: application/json
+
+{
+    "createdBy": "user-1"
+}
+
+> {% client.global.set("orderId", response.body.id); %}
+
+### Get order by id
+GET {{MCafeWebUrl}}/cashier/orders/{{orderId}}
+
+
+### Add an item to the order
+POST {{MCafeWebUrl}}/cashier/orders/{{orderId}}/items
+Content-Type: application/json
+
+{
+    "productId": "0d61f7fd-d9a6-4c2c-aa6e-fdf63bbc0540",
+    "quantity": 1
+}
+
+### Remove an item from the order
+DELETE {{MCafeWebUrl}}/cashier/orders/{{orderId}}/items/0d61f7fd-d9a6-4c2c-aa6e-fdf63bbc0540
+
+
+### Place order
+POST {{MCafeWebUrl}}/cashier/orders/{{orderId}}/place
+Content-Type: application/json
+
+{
+    "customerName": "customer-1"
+}

@@ -1,0 +1,25 @@
+@MCafeWebUrl = http://localhost:5010
+
+### Create product
+POST {{MCafeWebUrl}}/products
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Product 1",
+  "price": 100.00
+}
+
+> {% client.global.set("productId", response.body.id); %}
+
+### GET list of products
+GET {{MCafeWebUrl}}/products
+Accept: application/json
+
+### GET product by id
+GET {{MCafeWebUrl}}/products/{{productId}}
+Accept: application/json
+
+### DELETE product by id
+DELETE {{MCafeWebUrl}}/products/{{productId}}
+Accept: application/json
